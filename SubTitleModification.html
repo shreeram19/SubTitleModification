@@ -1,0 +1,279 @@
+<html>
+
+<body>
+    <input type="file" onChange="openFile(event)">
+
+    <div id="time">
+        <br> Modify Hr:<input type="number" step="1" id="hrNumber" onChange="timeChange(event)" value=0>
+        <br> Modify Min:<input type="number" step="1" id="minNumber" onChange="timeChange(event)" value=0>
+        <br> Modify Sec:<input type="number" step="1" id="secNumber" onChange="timeChange(event)" value=0>
+        <br> Modify Milli Sec:<input type="number" step="1" id="mSecNumber" onChange="timeChange(event)" value=0>
+        <button onCLick="convert(event)" disabled id="convertButton">Convert Sub Title</button>
+    </div>
+    <div id="newsub"></div>
+    <a id="download" download style="display: none;">Click to download New Subtitle</a>
+
+
+    <script>
+        var subMeta = {};
+
+        function convert(e) {
+            subMeta.hr = parseInt($("#hrNumber")[0].value);
+            subMeta.min = parseInt($("#minNumber")[0].value);
+            subMeta.sec = parseInt($("#secNumber")[0].value);
+            subMeta.mSec = parseInt($("#mSecNumber")[0].value);
+            subMeta.l = 12;
+
+            var newContent = iterate(subMeta);
+
+            window.URL = window.URL || window.webkitURL;
+
+            var blob = new Blob([newContent], {
+                type: 'text/srt'
+            });
+
+            var link = document.createElement('link');
+            link.rel = 'srt';
+            var download = $("#download")[0];
+            download.href = window.URL.createObjectURL(blob);
+            download.download = "sample.srt";
+            download.style.display = "inline-block";
+        }
+
+        function timeChange(e) {
+            var id = e.target.id;
+            var value = parseFloat(e.target.value);
+            var absValue = Math.abs(value);
+            var eve = new Event("change");
+            switch (id) {
+                case "minNumber":
+                    if (absValue >= 60) {
+                        reducePrevious("#hrNumber", e, eve);
+                    }
+                    break;
+                case "secNumber":
+                    if (absValue >= 60) {
+                        reducePrevious("#minNumber", e, eve);
+                    }
+                    break;
+                case "mSecNumber":
+                    if (absValue >= 1000) {
+                        reducePrevious("#secNumber", e, eve);
+                    }
+                    break;
+
+            }
+
+        }
+
+        function reducePrevious(id, e, eve) {
+            var value = parseFloat(e.target.value);
+            if (value > 0) {
+                $(id)[0].value++;
+                $(id)[0].dispatchEvent(eve);
+                e.target.value = 0;
+            } else if (value < 0) {
+                $(id)[0].value--;
+                $(id)[0].dispatchEvent(eve);
+                e.target.value = 0;
+            }
+
+        }
+
+        function $(id) {
+            return document.querySelectorAll(id);
+        }
+
+        function updateProgress(evt) {
+            if (evt.lengthComputable) {
+                var loaded = (evt.loaded / evt.total);
+
+                $("#newsub")[0].innerText = loaded * 100 + "%";
+
+            }
+        }
+
+        function updateError(evt) {
+            $("#newsub")[0].innerText = "Error";
+        }
+
+        function openFile(e) {
+
+            var f = e.target.files[0];
+            var fileType = f.name.split(".")[f.name.split(".").length -1];
+            if(fileType != 'srt'){
+              $("#convertButton")[0].disabled = true;
+              $("#newsub")[0].innerText = "";
+              alert("This application accepts only SRT files");
+              return;
+            }
+
+            if (window.File && window.FileReader) {
+              $("#newsub")[0].innerText="";
+                var r = new FileReader();
+                r.onprogress = updateProgress;
+                r.onerror = updateError;
+                r.onload = function(e) {
+                    $("#newsub")[0].innerText = 1 * 100 + "%";
+                    subMeta.content = e.target.result;
+                    $("#convertButton")[0].disabled = false;
+
+
+                };
+                r.readAsText(f);
+
+
+            }
+
+        }
+
+        subMeta.regO = /\d\d:\d\d:\d\d/g;
+        subMeta.reg = /\d\d:\d\d:\d\d,\d\d\d/g;
+        subMeta.arr = [];
+        subMeta.newTime;
+        subMeta.sub;
+
+        subMeta.js = ``;
+
+        function getNewTime(arr) {
+            arr.forEach(function(a, i) {
+                if (a < 10) {
+                    arr[i] = "0" + a;
+                } else {
+                    arr[i] = "" + a;
+                }
+            })
+
+            return arr.join(":");
+
+        }
+
+
+        function modifyTime(arr, i, f) {
+            if (i < 0) {
+
+                return arr;
+            } else if (i == 0) {
+
+                arr[i] = arr[i] + f;
+            } else if(i == 3){
+              var temp = (arr[i] + f);
+              if (temp >= 1000) {
+
+                  arr[i] = temp % 1000;
+                  arr = modifyTime(arr, i - 1, 1);
+              } else if (temp < 1000 && temp > 0) {
+
+                  arr[i] = temp;
+              } else if (temp <= 0) {
+
+                  arr[i] = 1000 + temp;
+                  arr = modifyTime(arr, i - 1, -1);
+              }
+
+            }else {
+
+                var temp = (arr[i] + f);
+                if (temp >= 60) {
+
+                    arr[i] = temp % 60;
+                    arr = modifyTime(arr, i - 1, 1);
+                } else if (temp < 60 && temp > 0) {
+
+                    arr[i] = temp;
+                } else if (temp <= 0) {
+
+                    arr[i] = 60 + temp;
+                    arr = modifyTime(arr, i - 1, -1);
+                }
+
+
+            }
+            return arr;
+        }
+
+        function iterate(subMeta) {
+            var arr = [];
+            var newTime;
+            var js = subMeta.content;
+            for (i = 0; i < js.length; i++) {
+                sub = js.substring(i, i + subMeta.l);
+                if (subMeta.reg.test(sub)) {
+                  console.log("new time ");
+                    arr = sub.splitTime();
+
+                    arr.forEach(function(a, i) {
+                        arr[i] = parseInt(arr[i]);
+                    });
+                    if(subMeta.mSec !=0){
+
+                      console.log("old milli sec:" + arr + ":increase:" + subMeta.mSec);
+                      arr = modifyTime(arr, 3, subMeta.mSec);
+                      console.log("new milli sec:" + arr);
+
+                    }
+                    if (subMeta.sec != 0) {
+                        console.log("old sec:" + arr + ":increase:" + subMeta.sec);
+                        arr = modifyTime(arr, 2, subMeta.sec);
+                        console.log("new sec:" + arr);
+                    }
+
+                    if (subMeta.min != 0) {
+                        console.log("old min:" + arr + ":inc:" + subMeta.min);
+                        arr = modifyTime(arr, 1, subMeta.min);
+                        console.log("new min:" + arr);
+                    }
+
+
+                    newTime = arr.joinTime();
+                    js = js.replaceAt(i, i + subMeta.l, newTime);
+
+                }
+            }
+
+            return js;
+        }
+        Array.prototype.joinTime = function(){
+          var self = this;
+          this.forEach(function(a,i){
+            if(i == 3){
+              if(a < 100){
+                self[i] = "0" + a;
+              } if(a < 10){
+                self[i] = "00" + a;
+              } else {
+                self[i] = "" + a;
+              }
+            } else {
+              if (a < 10) {
+                  self[i] = "0" + a;
+              } else {
+                  self[i] = "" + a;
+              }
+            }
+          });
+          var str = self.join(":");
+          var liC = str.lastIndexOf(":");
+          return str.replaceAt(liC,liC + 1, ",");
+
+        };
+        String.prototype.splitTime = function(){
+          var temp = this.split(":");
+          var temp2 = temp[2].split(",");
+          temp.pop();
+          return temp.concat(temp2);
+        }
+        String.prototype.replaceAt = function(startIndex, endIndex, newSubString) {
+
+            if (startIndex == 0) {
+                return newSubString + this.substr(endIndex + 1);
+            } else {
+
+                return this.substr(0, (startIndex)) + newSubString + this.substr(endIndex);
+            }
+
+        };
+    </script>
+</body>
+
+</html>
